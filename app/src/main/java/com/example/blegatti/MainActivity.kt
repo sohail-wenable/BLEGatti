@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private val serviceUUID = "50DB505C-8AC4-4738-8448-3B1D9CC09CC5"
     private val characteristicUUID = "D901B45B-4916-412E-ACCA-376ECB603B2C"
     private val devices = mutableListOf<BLEDevice>()
+    private val uniqueDeviceAddresses = mutableSetOf<String>()
 
     private val REQUEST_BLUETOOTH_PERMISSIONS = 1
     private var isDeviceFound = false
@@ -108,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         }
         isDeviceFound = false
         devices.clear()
+        uniqueDeviceAddresses.clear()
         adapter.notifyDataSetChanged()
 
         val scanner = bluetoothAdapter.bluetoothLeScanner
@@ -140,14 +142,18 @@ class MainActivity : AppCompatActivity() {
                     ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
                     return
                 }
-                devices.add(BLEDevice(device.name, device.address))
-                adapter.notifyDataSetChanged()
+                val deviceAddress = device.address
+                if (!uniqueDeviceAddresses.contains(deviceAddress)) {
+                    uniqueDeviceAddresses.add(deviceAddress)
+                    devices.add(BLEDevice(device.name, deviceAddress))
+                    adapter.notifyDataSetChanged()
 
-                if (device.name == deviceName && device.address == deviceAddress) {
-                    isDeviceFound = true
-                    bluetoothAdapter.bluetoothLeScanner.stopScan(this)
-                    connectToDevice(device)
-                    Log.i("BLE", "Scan stopped after finding device: ${device.name}")
+                    if (device.name == this@MainActivity.deviceName && device.address == this@MainActivity.deviceAddress) {
+                        isDeviceFound = true
+                        bluetoothAdapter.bluetoothLeScanner.stopScan(this)
+                        connectToDevice(device)
+                        Log.i("BLE", "Scan stopped after finding device: ${device.name}")
+                    }
                 }
             }
         }
