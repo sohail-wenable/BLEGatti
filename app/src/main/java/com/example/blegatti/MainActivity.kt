@@ -16,6 +16,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import android.widget.Button
+import android.widget.ListView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 
@@ -26,9 +28,11 @@ class MainActivity : AppCompatActivity() {
     private val deviceAddress = "00:18:05:AC:1D:86"
     private val serviceUUID = "50DB505C-8AC4-4738-8448-3B1D9CC09CC5"
     private val characteristicUUID = "D901B45B-4916-412E-ACCA-376ECB603B2C"
+    private val devices = mutableListOf<BLEDevice>()
 
     private val REQUEST_BLUETOOTH_PERMISSIONS = 1
     private var isDeviceFound = false
+    private lateinit var adapter: DeviceListAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +57,10 @@ class MainActivity : AppCompatActivity() {
         stopButton.setOnClickListener {
             stopScan()
         }
+
+        adapter = DeviceListAdapter(this, devices, deviceAddress)
+        val listView: ListView = findViewById(R.id.deviceList)
+        listView.adapter = adapter
     }
 
     private fun checkAndRequestPermissions(): Boolean {
@@ -99,6 +107,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         isDeviceFound = false
+        devices.clear()
+        adapter.notifyDataSetChanged()
+
         val scanner = bluetoothAdapter.bluetoothLeScanner
         scanner.startScan(scanCallback)
         Log.i("BLE", "Scan started.")
@@ -129,6 +140,9 @@ class MainActivity : AppCompatActivity() {
                     ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
                     return
                 }
+                devices.add(BLEDevice(device.name, device.address))
+                adapter.notifyDataSetChanged()
+
                 if (device.name == deviceName && device.address == deviceAddress) {
                     isDeviceFound = true
                     bluetoothAdapter.bluetoothLeScanner.stopScan(this)
