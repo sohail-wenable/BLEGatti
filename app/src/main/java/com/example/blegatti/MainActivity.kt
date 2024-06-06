@@ -15,9 +15,11 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
+import android.widget.AdapterView
 import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 
@@ -62,6 +64,12 @@ class MainActivity : AppCompatActivity() {
         adapter = DeviceListAdapter(this, devices, deviceAddress)
         val listView: ListView = findViewById(R.id.deviceList)
         listView.adapter = adapter
+
+        listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+            val selectedDevice = devices[position]
+            Toast.makeText(this, "Connecting to ${selectedDevice.name ?: "Unknown"}", Toast.LENGTH_SHORT).show()
+            connectToDevice(selectedDevice.address)
+        }
     }
 
     private fun checkAndRequestPermissions(): Boolean {
@@ -151,7 +159,7 @@ class MainActivity : AppCompatActivity() {
                     if (device.name == this@MainActivity.deviceName && device.address == this@MainActivity.deviceAddress) {
                         isDeviceFound = true
                         bluetoothAdapter.bluetoothLeScanner.stopScan(this)
-                        connectToDevice(device)
+                        connectToDevice(device.address)
                         Log.i("BLE", "Scan stopped after finding device: ${device.name}")
                     }
                 }
@@ -159,18 +167,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun connectToDevice(device: BluetoothDevice) {
+    private fun connectToDevice(address: String) {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
             return
         }
-        bluetoothGatt = device.connectGatt(this, false, gattCallback)
+        val bluetoothDevice = bluetoothAdapter.getRemoteDevice(address)
+        bluetoothGatt = bluetoothDevice.connectGatt(this, false, gattCallback)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 Log.i("BLE", "Connected to GATT server.")
+                runOnUiThread {
+                    findViewById<TextView>(R.id.statusText).text = "Connected to GATT server."
+                }
                 if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                     ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
                     return
@@ -178,6 +190,9 @@ class MainActivity : AppCompatActivity() {
                 gatt.discoverServices()
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
                 Log.i("BLE", "Disconnected from GATT server.")
+                runOnUiThread {
+                    findViewById<TextView>(R.id.statusText).text = "Disconnected from GATT server."
+                }
                 bluetoothGatt?.close()
                 bluetoothGatt = null
             }
@@ -207,6 +222,9 @@ class MainActivity : AppCompatActivity() {
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             val data = characteristic.value.toString(Charsets.UTF_8)
             Log.i("BLE", "Received data: $data")
+            runOnUiThread {
+                findViewById<TextView>(R.id.statusText).text = "Received data: $data"
+            }
         }
     }
 
