@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -15,6 +16,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.util.Log
+import android.view.View
 import android.widget.AdapterView
 import android.widget.Button
 import android.widget.ListView
@@ -22,6 +24,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
@@ -32,10 +35,14 @@ class MainActivity : AppCompatActivity() {
     private val characteristicUUID = "00002a57-0000-1000-8000-00805f9b34fb"
     private val devices = mutableListOf<BLEDevice>()
     private val uniqueDeviceAddresses = mutableSetOf<String>()
+    private val services = mutableListOf<BLEService>()
+    private val characteristics = mutableListOf<BLECharacteristic>()
 
     private val REQUEST_BLUETOOTH_PERMISSIONS = 1
     private var isDeviceFound = false
-    private lateinit var adapter: DeviceListAdapter
+    private lateinit var deviceAdapter: DeviceListAdapter
+    private lateinit var serviceAdapter: ServiceListAdapter
+    private lateinit var characteristicAdapter: CharacteristicListAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,16 +68,34 @@ class MainActivity : AppCompatActivity() {
             stopScan()
         }
 
-        adapter = DeviceListAdapter(this, devices, deviceAddress)
-        val listView: ListView = findViewById(R.id.deviceList)
-        listView.adapter = adapter
+        deviceAdapter = DeviceListAdapter(this, devices, deviceAddress)
+        val deviceListView: ListView = findViewById(R.id.deviceList)
+        deviceListView.adapter = deviceAdapter
 
-        listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+        deviceListView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
             val selectedDevice = devices[position]
             Toast.makeText(this, "Connecting to ${selectedDevice.name ?: "Unknown"}", Toast.LENGTH_SHORT).show()
 
             val bluetoothDevice = bluetoothAdapter.getRemoteDevice(selectedDevice.address)
             connectToDevice(bluetoothDevice)
+        }
+
+        serviceAdapter = ServiceListAdapter(this, services)
+        val serviceListView: ListView = findViewById(R.id.serviceList)
+        serviceListView.adapter = serviceAdapter
+
+        serviceListView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+            val selectedService = services[position]
+            displayCharacteristics(selectedService)
+        }
+
+        characteristicAdapter = CharacteristicListAdapter(this, characteristics)
+        val characteristicListView: ListView = findViewById(R.id.characteristicList)
+        characteristicListView.adapter = characteristicAdapter
+
+        characteristicListView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+            val selectedCharacteristic = characteristics[position]
+            enableNotifications(selectedCharacteristic.uuid)
         }
     }
 
@@ -120,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         isDeviceFound = false
         devices.clear()
         uniqueDeviceAddresses.clear()
-        adapter.notifyDataSetChanged()
+        deviceAdapter.notifyDataSetChanged()
 
         val scanner = bluetoothAdapter.bluetoothLeScanner
         scanner.startScan(scanCallback)
@@ -156,7 +181,7 @@ class MainActivity : AppCompatActivity() {
                 if (!uniqueDeviceAddresses.contains(deviceAddress)) {
                     uniqueDeviceAddresses.add(deviceAddress)
                     devices.add(BLEDevice(device.name, deviceAddress))
-                    adapter.notifyDataSetChanged()
+                    deviceAdapter.notifyDataSetChanged()
 
                     if (device.name == this@MainActivity.deviceName && device.address == this@MainActivity.deviceAddress) {
                         isDeviceFound = true
@@ -201,14 +226,14 @@ class MainActivity : AppCompatActivity() {
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                val service = gatt.getService(serviceUUID.toUUID())
-                val characteristic = service.getCharacteristic(characteristicUUID.toUUID())
-                if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
-                    return
+                services.clear()
+                gatt.services.forEach { service ->
+                    services.add(BLEService(service.uuid))
                 }
-                gatt.requestMtu(200)
-                enableNotifications(gatt, characteristic)
+                runOnUiThread {
+                    findViewById<ListView>(R.id.serviceList).visibility = View.VISIBLE
+                    serviceAdapter.notifyDataSetChanged()
+                }
             }
         }
 
@@ -229,13 +254,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun displayCharacteristics(service: BLEService) {
+        val gattService = bluetoothGatt?.getService(service.uuid)
+        characteristics.clear()
+        gattService?.characteristics?.forEach { characteristic ->
+            characteristics.add(BLECharacteristic(characteristic.uuid))
+        }
+        runOnUiThread {
+            findViewById<ListView>(R.id.characteristicList).visibility = View.VISIBLE
+            characteristicAdapter.notifyDataSetChanged()
+        }
+    }
+
+    private fun enableNotifications(characteristicUUID: UUID) {
+        val characteristic = bluetoothGatt?.getService(serviceUUID.toUUID())?.getCharacteristic(characteristicUUID)
+        if (characteristic != null) {
+            enableNotifications(bluetoothGatt!!, characteristic)
+        }
+    }
+
     private fun enableNotifications(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
             return
         }
         gatt.setCharacteristicNotification(characteristic, true)
-        val descriptor = characteristic.getDescriptor(characteristicUUID.toUUID())
+        val descriptor = characteristic.getDescriptor(characteristic.uuid)
         descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         gatt.writeDescriptor(descriptor)
     }
