@@ -26,10 +26,10 @@ import androidx.core.app.ActivityCompat
 class MainActivity : AppCompatActivity() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private var bluetoothGatt: BluetoothGatt? = null
-    private val deviceName = "InhandBLE"
-    private val deviceAddress = "00:18:05:AC:1D:86"
-    private val serviceUUID = "50DB505C-8AC4-4738-8448-3B1D9CC09CC5"
-    private val characteristicUUID = "D901B45B-4916-412E-ACCA-376ECB603B2C"
+    private val deviceName = "WQ-87A023190998"
+    private val deviceAddress = "08:3A:8D:BE:DF:A2"
+    private val serviceUUID = "00001816-0000-1000-8000-00805f9b34fb"
+    private val characteristicUUID = "00002a57-0000-1000-8000-00805f9b34fb"
     private val devices = mutableListOf<BLEDevice>()
     private val uniqueDeviceAddresses = mutableSetOf<String>()
 
@@ -68,7 +68,9 @@ class MainActivity : AppCompatActivity() {
         listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
             val selectedDevice = devices[position]
             Toast.makeText(this, "Connecting to ${selectedDevice.name ?: "Unknown"}", Toast.LENGTH_SHORT).show()
-            connectToDevice(selectedDevice.address)
+
+            val bluetoothDevice = bluetoothAdapter.getRemoteDevice(selectedDevice.address)
+            connectToDevice(bluetoothDevice)
         }
     }
 
@@ -159,7 +161,7 @@ class MainActivity : AppCompatActivity() {
                     if (device.name == this@MainActivity.deviceName && device.address == this@MainActivity.deviceAddress) {
                         isDeviceFound = true
                         bluetoothAdapter.bluetoothLeScanner.stopScan(this)
-                        connectToDevice(device.address)
+                        connectToDevice(device) // Passing BluetoothDevice directly
                         Log.i("BLE", "Scan stopped after finding device: ${device.name}")
                     }
                 }
@@ -167,13 +169,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun connectToDevice(address: String) {
+    private fun connectToDevice(device: BluetoothDevice) {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH_PERMISSIONS)
             return
         }
-        val bluetoothDevice = bluetoothAdapter.getRemoteDevice(address)
-        bluetoothGatt = bluetoothDevice.connectGatt(this, false, gattCallback)
+        bluetoothGatt = device.connectGatt(this, false, gattCallback)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
